@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: bailord-backend
+    env: node
+    plan: starter
+    repo: .
+    buildCommand: npm ci
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: DB_HOST
+        scope: secret
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_USER
+        scope: secret
+      - key: DB_PASSWORD
+        scope: secret
+      - key: DB_NAME
+        scope: secret
+      - key: JWT_SECRET
+        scope: secret
+      - key: FRONTEND_URL
+        scope: secret
+      - key: RUN_MIGRATIONS
+        value: "false"
+      - key: RUN_DB_INIT
+        value: "false"
