@@ -1,0 +1,2 @@
+/api/*  https://backend-ytic.onrender.com/:splat  200!
+/socket.io/*  https://backend-ytic.onrender.com/:splat  200!
