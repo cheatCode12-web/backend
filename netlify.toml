@@ -1,0 +1,6 @@
+[build]
+  publish = "public_html"
+  command = "echo 'No build step: deploying static files'"
+
+[dev]
+  framework = "static"

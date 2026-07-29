@@ -1,0 +1,18 @@
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION BEGIN
+PassengerAppRoot "/home/bailord3/public_html/backend"
+PassengerBaseURI "/backend"
+PassengerNodejs "/home/bailord3/nodevenv/public_html/backend/18/bin/node"
+PassengerAppType node
+PassengerStartupFile src/server.js
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION END
+# DO NOT REMOVE OR MODIFY. CLOUDLINUX ENV VARS CONFIGURATION BEGIN
+<IfModule Litespeed>
+SetEnv  JWT_SECRET b169aa3ad3b60320547760d6c2851a3e894755e7c181c45bc8dd9a1fb40ff3f8
+SetEnv DB_NAME bailord3_dev
+SetEnv DB_PASSWORD Cheatthekidd17
+SetEnv DB_PORT 3306
+SetEnv JWT_REFRESH_SECRET fd5fd4ec396df1c77f0cb6d1bc13a44247c082c4e48c675d34174e5b1fcd1cc81
+SetEnv DB_USER bailord3_app
+SetEnv DB_HOST 127.0.0.1
+</IfModule>
+# DO NOT REMOVE OR MODIFY. CLOUDLINUX ENV VARS CONFIGURATION END

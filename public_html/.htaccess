@@ -1,0 +1,19 @@
+RewriteEngine On
+
+# Keep every request on HTTPS.
+RewriteCond %{HTTPS} off
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Let backend and system paths resolve normally instead of falling into the SPA.
+RewriteRule ^backend(?:/|$) - [L]
+RewriteRule ^api(?:/|$) - [L]
+RewriteRule ^cgi-bin(?:/|$) - [L]
+RewriteRule ^\.well-known(?:/|$) - [L]
+
+# Serve real files and directories directly.
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Frontend client-side routes fall back to the SPA shell.
+RewriteRule ^ index.html [L]
