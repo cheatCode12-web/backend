@@ -44,16 +44,36 @@ const allowedOrigins = Array.from(
 
 const corsOptions = {
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Allow same-origin (no origin), explicit allowed origins, and Netlify subdomains
+    if (
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      (origin && origin.includes(".netlify.app"))
+    ) {
       return callback(null, true);
     }
 
-    return callback(new Error("Not allowed by CORS"));
+    // Deny other origins without throwing an error (avoid turning this into a 500)
+    return callback(null, false);
   },
   credentials: true,
 };
 
 app.use(cors(corsOptions));
+// Ensure preflight requests are handled and common CORS headers are present
+app.options("*", cors(corsOptions));
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Origin, X-Requested-With, Content-Type, Accept, Authorization"
+  );
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+  );
+  next();
+});
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ limit: "1mb", extended: true }));
 
