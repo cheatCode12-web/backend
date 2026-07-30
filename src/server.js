@@ -21,8 +21,12 @@ console.log("STEP 1: env loaded", {
   NODE_ENV: process.env.NODE_ENV,
   PORT: process.env.PORT,
   DB_HOST: process.env.DB_HOST,
+  DB_PORT: process.env.DB_PORT,
   DB_NAME: process.env.DB_NAME,
-  FRONTEND_URL: process.env.FRONTEND_URL
+  DB_USER: process.env.DB_USER ? "SET" : "MISSING",
+  FRONTEND_URL: process.env.FRONTEND_URL,
+  RUN_MIGRATIONS: process.env.RUN_MIGRATIONS,
+  RUN_DB_INIT: process.env.RUN_DB_INIT,
 });
 
 const app = require("./app");
