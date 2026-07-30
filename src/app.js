@@ -40,6 +40,7 @@ const allowedOrigins = Array.from(
   new Set(
     [
       process.env.FRONTEND_URL,
+      "https://quiet-pavlova-658c22.netlify.app",
       "https://bailordpulse.com",
       "http://localhost:8080",
       "http://127.0.0.1:8080",
@@ -50,11 +51,14 @@ const allowedOrigins = Array.from(
 
 const corsOptions = {
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // Allow same-origin requests (no origin), exact allowed origins,
+    // or any Netlify subdomain (e.g., quiet-pavlova-*.netlify.app)
+    if (!origin || allowedOrigins.includes(origin) || (origin && origin.endsWith('.netlify.app'))) {
       return callback(null, true);
     }
 
-    return callback(new Error("Not allowed by CORS"));
+    // Deny other origins without throwing to avoid 500 responses
+    return callback(null, false);
   },
   credentials: true,
 };
