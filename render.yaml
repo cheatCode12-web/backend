@@ -5,8 +5,8 @@ services:
     plan: starter
     repo: .
     buildCommand: npm ci
-    buildCommand: cd public_html/backend && npm ci
-    startCommand: cd public_html/backend && npm start
+    buildCommand: npm ci
+    startCommand: npm start
     envVars:
       - key: NODE_ENV
         value: production
