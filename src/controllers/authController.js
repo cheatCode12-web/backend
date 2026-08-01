@@ -37,7 +37,7 @@ const upgradeLegacyPasswordIfNeeded = async (userId, plainPassword, storedPasswo
   }
 
   const hashedPassword = await bcrypt.hash(plainPassword, 10);
-  await pool.query("UPDATE users SET password = ? WHERE id = ?", [hashedPassword, userId]);
+  await pool.query("UPDATE users SET password = $1 WHERE id = $2", [hashedPassword, userId]);
   console.log("[AUTH] Upgraded legacy plain-text password for user:", userId);
 };
 
@@ -102,7 +102,7 @@ module.exports.registerUser = async (req, res) => {
       throw new Error("users table is missing required auth columns");
     }
 
-    const [existing] = await pool.query("SELECT * FROM users WHERE email = ?", [email]);
+    const [existing] = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
     if (existing.length > 0) {
       return res.status(400).json({ message: "User already exists" });
     }
@@ -143,14 +143,14 @@ module.exports.registerUser = async (req, res) => {
       }
     }
 
-    const placeholders = userFields.map(() => "?").join(", ");
+    const placeholders = userFields.map((_, index) => `$${index + 1}`).join(", ");
 
     await pool.query(
       `INSERT INTO users (${userFields.join(", ")}) VALUES (${placeholders})`,
       userValues
     );
 
-    const [userRows] = await pool.query("SELECT * FROM users WHERE email = ?", [email]);
+    const [userRows] = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
     const user = userRows[0];
 
     console.log("[REGISTER] User created:", {
@@ -219,7 +219,7 @@ module.exports.loginUser = async (req, res) => {
       throw new Error("users table is missing required auth columns");
     }
 
-    const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [email]);
+    const [rows] = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
     const user = rows[0];
 
     if (!user) {
@@ -302,7 +302,7 @@ module.exports.getUserProfile = async (req, res) => {
     ]);
 
     const [rows] = await pool.query(
-      `SELECT ${fields.join(", ")} FROM users WHERE id = ?`,
+      `SELECT ${fields.join(", ")} FROM users WHERE id = $1`,
       [userId]
     );
     const user = rows[0];
@@ -338,41 +338,42 @@ module.exports.updateUserProfile = async (req, res) => {
 
     const fields = [];
     const values = [];
-    if (typeof name !== "undefined" && availableColumns.has("name")) {
-      fields.push("name = ?");
-      values.push(name);
-    }
-    if (typeof email !== "undefined" && availableColumns.has("email")) {
-      fields.push("email = ?");
-      values.push(email);
-    }
-    if (typeof role !== "undefined" && availableColumns.has("role")) {
-      fields.push("role = ?");
-      values.push(role);
-    }
-    if (typeof phone !== "undefined" && availableColumns.has("phone")) {
-      fields.push("phone = ?");
-      values.push(phone);
-    }
-    if (typeof company !== "undefined" && availableColumns.has("company")) {
-      fields.push("company = ?");
-      values.push(company);
-    }
-    if (typeof address !== "undefined" && availableColumns.has("address")) {
-      fields.push("address = ?");
-      values.push(address);
-    }
-    if (typeof description !== "undefined" && availableColumns.has("description")) {
-      fields.push("description = ?");
-      values.push(description);
-    }
+let placeholderIndex = 1;
+      if (typeof name !== "undefined" && availableColumns.has("name")) {
+        fields.push(`name = $${placeholderIndex++}`);
+        values.push(name);
+      }
+      if (typeof email !== "undefined" && availableColumns.has("email")) {
+        fields.push(`email = $${placeholderIndex++}`);
+        values.push(email);
+      }
+      if (typeof role !== "undefined" && availableColumns.has("role")) {
+        fields.push(`role = $${placeholderIndex++}`);
+        values.push(role);
+      }
+      if (typeof phone !== "undefined" && availableColumns.has("phone")) {
+        fields.push(`phone = $${placeholderIndex++}`);
+        values.push(phone);
+      }
+      if (typeof company !== "undefined" && availableColumns.has("company")) {
+        fields.push(`company = $${placeholderIndex++}`);
+        values.push(company);
+      }
+      if (typeof address !== "undefined" && availableColumns.has("address")) {
+        fields.push(`address = $${placeholderIndex++}`);
+        values.push(address);
+      }
+      if (typeof description !== "undefined" && availableColumns.has("description")) {
+        fields.push(`description = $${placeholderIndex++}`);
+        values.push(description);
+      }
 
-    if (fields.length === 0) {
-      return res.status(400).json({ message: "No profile fields provided to update" });
-    }
+      if (fields.length === 0) {
+        return res.status(400).json({ message: "No profile fields provided to update" });
+      }
 
-    values.push(userId);
-    const sql = `UPDATE users SET ${fields.join(", ")} WHERE id = ?`;
+      values.push(userId);
+      const sql = `UPDATE users SET ${fields.join(", ")} WHERE id = $${placeholderIndex}`;
     await pool.query(sql, values);
 
     const responseFields = selectAvailableColumns(availableColumns, [
@@ -386,7 +387,7 @@ module.exports.updateUserProfile = async (req, res) => {
       "description",
     ]);
     const [rows] = await pool.query(
-      `SELECT ${responseFields.join(", ")} FROM users WHERE id = ?`,
+      `SELECT ${responseFields.join(", ")} FROM users WHERE id = $1`,
       [userId]
     );
 
@@ -425,7 +426,7 @@ module.exports.changePassword = async (req, res) => {
       throw new Error("users table is missing password column");
     }
 
-    const [rows] = await pool.query("SELECT password FROM users WHERE id = ?", [userId]);
+    const [rows] = await pool.query("SELECT password FROM users WHERE id = $1", [userId]);
     const user = rows[0];
 
     if (!user) {
@@ -438,7 +439,7 @@ module.exports.changePassword = async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await pool.query("UPDATE users SET password = ? WHERE id = ?", [hashedPassword, userId]);
+    await pool.query("UPDATE users SET password = $1 WHERE id = $2", [hashedPassword, userId]);
 
     res.json({ message: "Password changed successfully" });
   } catch (error) {
@@ -498,7 +499,7 @@ module.exports.refreshToken = async (req, res) => {
     }
 
     const [rows] = await pool.query(
-      "SELECT * FROM users WHERE id = ? AND refresh_token = ?",
+      "SELECT * FROM users WHERE id = $1 AND refresh_token = $2",
       [decoded.id, refreshToken]
     );
 

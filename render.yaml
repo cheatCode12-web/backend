@@ -24,6 +24,8 @@ services:
         scope: secret
       - key: JWT_SECRET
         scope: secret
+      - key: JWT_REFRESH_SECRET
+        scope: secret
       - key: FRONTEND_URL
         scope: secret
       - key: RUN_MIGRATIONS
