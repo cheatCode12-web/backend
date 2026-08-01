@@ -11,8 +11,8 @@ async function ensurePool() {
 }
 
 async function queryOne(sql, params = []) {
-  const [rows] = await pool.query(sql, params);
-  return rows[0] || null;
+  const result = await pool.query(sql, params);
+  return result.rows[0] || null;
 }
 
 function isSafeIdentifier(identifier) {
@@ -24,7 +24,9 @@ async function tableExists(tableName) {
     `
       SELECT COUNT(*) AS count
       FROM information_schema.tables
-      WHERE table_schema = DATABASE() AND table_name = ?
+      WHERE table_catalog = current_database()
+        AND table_schema = current_schema()
+        AND table_name = $1
     `,
     [tableName]
   );
@@ -34,9 +36,14 @@ async function tableExists(tableName) {
 async function columnInfo(tableName, columnName) {
   return queryOne(
     `
-      SELECT column_name AS columnName, column_type AS columnType
+      SELECT column_name AS columnName,
+             data_type AS columnType,
+             udt_name AS udtName
       FROM information_schema.columns
-      WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?
+      WHERE table_catalog = current_database()
+        AND table_schema = current_schema()
+        AND table_name = $1
+        AND column_name = $2
     `,
     [tableName, columnName]
   );
@@ -46,27 +53,24 @@ async function getTableColumns(tableName) {
   await ensurePool();
 
   try {
-    const [rows] = await pool.query(
+    const result = await pool.query(
       `
         SELECT column_name AS columnName
         FROM information_schema.columns
-        WHERE table_schema = DATABASE() AND table_name = ?
+        WHERE table_catalog = current_database()
+          AND table_schema = current_schema()
+          AND table_name = $1
       `,
       [tableName]
     );
 
-    return new Set(rows.map((row) => row.columnName));
+    return new Set(result.rows.map((row) => row.columnName));
   } catch (error) {
     if (!isSafeIdentifier(tableName)) {
       throw error;
     }
 
-    try {
-      const [rows] = await pool.query(`SHOW COLUMNS FROM ${tableName}`);
-      return new Set(rows.map((row) => row.Field));
-    } catch (fallbackError) {
-      return new Set();
-    }
+    return new Set();
   }
 }
 

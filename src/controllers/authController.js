@@ -102,7 +102,8 @@ module.exports.registerUser = async (req, res) => {
       throw new Error("users table is missing required auth columns");
     }
 
-    const [existing] = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+    const existingResult = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+    const existing = existingResult.rows;
     if (existing.length > 0) {
       return res.status(400).json({ message: "User already exists" });
     }
@@ -150,8 +151,8 @@ module.exports.registerUser = async (req, res) => {
       userValues
     );
 
-    const [userRows] = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
-    const user = userRows[0];
+    const userResult = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+    const user = userResult.rows[0];
 
     console.log("[REGISTER] User created:", {
       id: user.id,
@@ -219,8 +220,8 @@ module.exports.loginUser = async (req, res) => {
       throw new Error("users table is missing required auth columns");
     }
 
-    const [rows] = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
-    const user = rows[0];
+    const loginResult = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+    const user = loginResult.rows[0];
 
     if (!user) {
       console.log("[LOGIN] User not found:", email);
@@ -301,11 +302,11 @@ module.exports.getUserProfile = async (req, res) => {
       "status",
     ]);
 
-    const [rows] = await pool.query(
+    const profileResult = await pool.query(
       `SELECT ${fields.join(", ")} FROM users WHERE id = $1`,
       [userId]
     );
-    const user = rows[0];
+    const user = profileResult.rows[0];
 
     if (!user) {
       console.log("[PROFILE] User not found:", userId);
@@ -386,12 +387,12 @@ let placeholderIndex = 1;
       "address",
       "description",
     ]);
-    const [rows] = await pool.query(
+    const updatedResult = await pool.query(
       `SELECT ${responseFields.join(", ")} FROM users WHERE id = $1`,
       [userId]
     );
 
-    res.json(rows[0]);
+    res.json(updatedResult.rows[0]);
   } catch (error) {
     console.error("[PROFILE] Update profile error:", error);
     res.status(500).json({ message: "Failed to update profile" });
@@ -426,8 +427,8 @@ module.exports.changePassword = async (req, res) => {
       throw new Error("users table is missing password column");
     }
 
-    const [rows] = await pool.query("SELECT password FROM users WHERE id = $1", [userId]);
-    const user = rows[0];
+    const passwordResult = await pool.query("SELECT password FROM users WHERE id = $1", [userId]);
+    const user = passwordResult.rows[0];
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -498,12 +499,12 @@ module.exports.refreshToken = async (req, res) => {
       return res.status(501).json({ message: "Refresh tokens are not enabled on this database schema" });
     }
 
-    const [rows] = await pool.query(
+    const refreshResult = await pool.query(
       "SELECT * FROM users WHERE id = $1 AND refresh_token = $2",
       [decoded.id, refreshToken]
     );
 
-    if (!rows[0]) {
+    if (!refreshResult.rows[0]) {
       console.log("[REFRESH] Stored refresh token mismatch for user:", decoded.id);
       return res.status(401).json({ message: "Invalid refresh token" });
     }

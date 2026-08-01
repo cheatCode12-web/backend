@@ -33,7 +33,7 @@ module.exports.registerUser = async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
 
     // Check if user exists
-    const [existing] = await pool.query("SELECT * FROM users WHERE email = ?", [email]);
+    const [existing] = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
     if (existing.length > 0)
       return res.status(400).json({ message: "User already exists" });
 
@@ -47,12 +47,12 @@ module.exports.registerUser = async (req, res) => {
     // Insert user with retailer fields if applicable
     const userFields = ['name', 'email', 'password', 'role', 'status'];
     const userValues = [name, email, hashedPassword, role, status];
-    const placeholders = '?, ?, ?, ?, ?';
+    const placeholders = '$1, $2, $3, $4, $5';
 
     if (type === 'retailer') {
       userFields.push('company', 'phone', 'address', 'description');
       userValues.push(businessName, phone, address, description);
-      placeholders += ', ?, ?, ?, ?';
+      placeholders += ', $6, $7, $8, $9';
     }
 
     await pool.query(
@@ -60,7 +60,7 @@ module.exports.registerUser = async (req, res) => {
       userValues
     );
 
-    const [userRows] = await pool.query("SELECT * FROM users WHERE email = ?", [email]);
+    const [userRows] = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
     const user = userRows[0];
 
     console.log('[REGISTER] User created:', { id: user.id, name: user.name, email: user.email, role: user.role });
@@ -120,7 +120,7 @@ module.exports.loginUser = async (req, res) => {
       DB_HOST: process.env.DB_HOST
     });
 
-    const [rows] = await pool.query("SELECT * FROM users WHERE email = ?", [email]);
+    const [rows] = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
     const user = rows[0];
 
     if (!user) {
@@ -198,7 +198,7 @@ module.exports.getUserProfile = async (req, res) => {
     console.log('[PROFILE] Fetching profile for user:', userId);
     
     const [rows] = await pool.query(
-      "SELECT id, name, email, role, company, phone, address, description, status FROM users WHERE id = ?",
+      "SELECT id, name, email, role, company, phone, address, description, status FROM users WHERE id = $1",
       [userId]
     );
     const user = rows[0];
@@ -225,25 +225,26 @@ module.exports.updateUserProfile = async (req, res) => {
     const { name, email, role, phone, company, address, description } = req.body;
 
     // Build dynamic update statement
+    let placeholderIndex = 1;
     const fields = [];
     const values = [];
-    if (typeof name !== 'undefined') { fields.push('name = ?'); values.push(name); }
-    if (typeof email !== 'undefined') { fields.push('email = ?'); values.push(email); }
-    if (typeof role !== 'undefined') { fields.push('role = ?'); values.push(role); }
-    if (typeof phone !== 'undefined') { fields.push('phone = ?'); values.push(phone); }
-    if (typeof company !== 'undefined') { fields.push('company = ?'); values.push(company); }
-    if (typeof address !== 'undefined') { fields.push('address = ?'); values.push(address); }
-    if (typeof description !== 'undefined') { fields.push('description = ?'); values.push(description); }
+    if (typeof name !== 'undefined') { fields.push(`name = $${placeholderIndex++}`); values.push(name); }
+    if (typeof email !== 'undefined') { fields.push(`email = $${placeholderIndex++}`); values.push(email); }
+    if (typeof role !== 'undefined') { fields.push(`role = $${placeholderIndex++}`); values.push(role); }
+    if (typeof phone !== 'undefined') { fields.push(`phone = $${placeholderIndex++}`); values.push(phone); }
+    if (typeof company !== 'undefined') { fields.push(`company = $${placeholderIndex++}`); values.push(company); }
+    if (typeof address !== 'undefined') { fields.push(`address = $${placeholderIndex++}`); values.push(address); }
+    if (typeof description !== 'undefined') { fields.push(`description = $${placeholderIndex++}`); values.push(description); }
 
     if (fields.length === 0) {
       return res.status(400).json({ message: 'No profile fields provided to update' });
     }
 
     values.push(userId);
-    const sql = `UPDATE users SET ${fields.join(', ')} WHERE id = ?`;
+    const sql = `UPDATE users SET ${fields.join(', ')} WHERE id = $${placeholderIndex}`;
     await pool.query(sql, values);
 
-    const [rows] = await pool.query('SELECT id, name, email, role, company, phone, address, description FROM users WHERE id = ?', [userId]);
+    const [rows] = await pool.query('SELECT id, name, email, role, company, phone, address, description FROM users WHERE id = $1', [userId]);
     const updated = rows[0];
 
     res.json(updated);
@@ -270,7 +271,7 @@ module.exports.changePassword = async (req, res) => {
       return res.status(400).json({ message: "New password must be at least 6 characters long" });
     }
 
-    const [rows] = await pool.query("SELECT password FROM users WHERE id = ?", [userId]);
+    const [rows] = await pool.query("SELECT password FROM users WHERE id = $1", [userId]);
     const user = rows[0];
 
     if (!user) {
@@ -283,7 +284,7 @@ module.exports.changePassword = async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await pool.query("UPDATE users SET password = ? WHERE id = ?", [hashedPassword, userId]);
+    await pool.query("UPDATE users SET password = $1 WHERE id = $2", [hashedPassword, userId]);
 
     res.json({ message: "Password changed successfully" });
   } catch (error) {
@@ -343,7 +344,7 @@ module.exports.refreshToken = async (req, res) => {
     
     // Check if refresh token exists in database
     const [rows] = await pool.query(
-      "SELECT * FROM users WHERE id = ? AND refresh_token = ?",
+      "SELECT * FROM users WHERE id = $1 AND refresh_token = $2",
       [decoded.id, refreshToken]
     );
     
