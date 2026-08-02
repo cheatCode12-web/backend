@@ -94,10 +94,15 @@ async function ensureIndex(tableName, indexName, createSql) {
 
 async function ensureUsersTable() {
   await pool.query(`
-    CREATE TYPE IF NOT EXISTS user_role AS ENUM ('admin', 'staff', 'retailer');
-  `);
-  await pool.query(`
-    CREATE TYPE IF NOT EXISTS user_status AS ENUM ('active', 'inactive', 'pending', 'suspended');
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+        CREATE TYPE user_role AS ENUM ('admin', 'staff', 'retailer');
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_status') THEN
+        CREATE TYPE user_status AS ENUM ('active', 'inactive', 'pending', 'suspended');
+      END IF;
+    END$$;
   `);
 
   await pool.query(`
