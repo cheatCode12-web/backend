@@ -11,6 +11,7 @@ let searchRoutes;
 let analyticsRoutes;
 let pool;
 let warmCoreSchema;
+let verifyDbConnection;
 
 try {
   authRoutes = require("./routes/authRoutes");
@@ -25,7 +26,7 @@ try {
 }
 
 try {
-  ({ pool } = require("./config/db"));
+  ({ pool, verifyDbConnection } = require("./config/db"));
   ({ warmCoreSchema } = require("./db/schemaGuard"));
   console.log("APP: DB module loaded");
 } catch (err) {
@@ -107,12 +108,11 @@ app.use("/backend/api/messages", messageRoutes);
 app.use("/backend/api/search", searchRoutes);
 app.use("/backend/api/analytics", analyticsRoutes);
 
-if (process.env.NODE_ENV !== "production" && pool) {
+if (pool && verifyDbConnection) {
   (async () => {
     try {
-      const conn = await pool.getConnection();
-      console.log("MySQL connected successfully");
-      conn.release();
+      await verifyDbConnection();
+      console.log("PostgreSQL connected successfully");
     } catch (err) {
       console.error("Database connection error:", err.message || err.code || err);
     }

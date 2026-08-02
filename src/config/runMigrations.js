@@ -5,8 +5,7 @@ const path = require('path');
 async function runMigrations() {
   try {
     console.log('Running migrations...');
-    
-    // Get the migration files content
+
     const addColumnsSQL = await fs.readFile(
       path.join('src', 'config', 'migrations', '001_add_analytics_columns.sql'),
       'utf8'
@@ -20,37 +19,32 @@ async function runMigrations() {
       'utf8'
     );
 
-    // Get a connection from the pool
-    // Run migrations in order using pg query interface
+    const client = pool;
+
     console.log('Adding analytics columns...');
-    const queries1 = addColumnsSQL.split(';').filter(q => q.trim());
+    const queries1 = addColumnsSQL.split(';').filter((q) => q.trim());
     for (const query of queries1) {
-      if (query.trim()) {
-        await pool.query(query);
-      }
+      await client.query(query);
     }
 
     console.log('Adding auth token storage...');
-    const queriesTokens = tokenStorageSQL.split(';').filter(q => q.trim());
+    const queriesTokens = tokenStorageSQL.split(';').filter((q) => q.trim());
     for (const query of queriesTokens) {
-      if (query.trim()) {
-        await pool.query(query);
-      }
+      await client.query(query);
     }
-    
+
     console.log('Adding sample data...');
-    const queries2 = sampleDataSQL.split(';').filter(q => q.trim());
+    const queries2 = sampleDataSQL.split(';').filter((q) => q.trim());
     for (const query of queries2) {
-      if (query.trim()) {
-        await pool.query(query);
-      }
+      await client.query(query);
     }
-    
+
     console.log('✅ Migrations completed successfully');
   } catch (error) {
     console.error('❌ Migration failed:', error);
     process.exit(1);
   } finally {
+    await pool.end();
     process.exit(0);
   }
 }

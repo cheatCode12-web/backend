@@ -1,46 +1,77 @@
 const { Pool } = require("pg");
 
-const usingDatabaseUrl = Boolean(process.env.DATABASE_URL);
-const dbConfig = usingDatabaseUrl
-  ? {
-      connectionString: process.env.DATABASE_URL,
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
-    }
-  : {
-      host: process.env.DB_HOST || "127.0.0.1",
-      port: process.env.DB_PORT || 5432,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD || process.env.DB_PASS || "",
-      database: process.env.DB_NAME || "bailord_dev",
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 2000,
-    };
+const connectionString = process.env.DATABASE_URL || process.env.PG_CONNECTION_STRING;
+const dbHost = process.env.DB_HOST || "127.0.0.1";
+const dbPort = process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 5432;
+const dbUser = process.env.DB_USER;
+const dbPassword = process.env.DB_PASSWORD || process.env.DB_PASS || "";
+const dbName = process.env.DB_NAME || "bailord_dev";
+const useSsl =
+  process.env.DB_SSL === "true" ||
+  process.env.PGSSLMODE === "require" ||
+  /render\.com$/.test(dbHost) ||
+  /render\.com/.test(connectionString || "");
 
 // Log DB config on load (for debugging)
 console.log("[DB CONFIG]", {
-  DATABASE_URL: usingDatabaseUrl ? "SET" : "MISSING",
-  DB_HOST: dbConfig.host || "(from DATABASE_URL)" || "127.0.0.1",
-  DB_PORT: dbConfig.port || "5432",
-  DB_USER: dbConfig.user ? "SET" : "MISSING",
-  DB_NAME: dbConfig.database || "(from DATABASE_URL)",
-  DB_HOST_SET: !!dbConfig.host,
-  DB_USER_SET: !!dbConfig.user,
-  DB_PASSWORD_SET: !!dbConfig.password,
-  DB_NAME_SET: !!dbConfig.database,
+  DATABASE_URL_SET: !!connectionString,
+  DB_HOST: dbHost,
+  DB_PORT: dbPort,
+  DB_USER: dbUser,
+  DB_NAME: dbName,
+  DB_HOST_SET: !!process.env.DB_HOST,
+  DB_USER_SET: !!process.env.DB_USER,
+  DB_PASSWORD_SET: !!process.env.DB_PASSWORD || !!process.env.DB_PASS,
+  DB_NAME_SET: !!process.env.DB_NAME,
+  DB_SSL: useSsl ? "ENABLED" : "DISABLED",
+  PGSSLMODE: process.env.PGSSLMODE || "unset",
 });
 
 // PostgreSQL connection pool
 let pool;
 try {
-  pool = new Pool(dbConfig);
+  const poolConfig = connectionString
+    ? {
+        connectionString,
+        ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+      }
+    : {
+        host: dbHost,
+        port: dbPort,
+        user: dbUser,
+        password: dbPassword,
+        database: dbName,
+        ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+      };
+
+  pool = new Pool({
+    ...poolConfig,
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  });
+
+  pool.on('error', (err) => {
+    console.error('[DB] Unexpected PostgreSQL pool error:', err.stack || err.message || err);
+  });
+
   console.log("[DB] PostgreSQL Pool created successfully");
 } catch (err) {
   console.error("[DB] Pool creation failed:", err.message || err);
-  // Create a dummy pool that will fail gracefully on queries
   pool = null;
 }
 
-module.exports = { pool };
+const verifyDbConnection = async () => {
+  if (!pool) {
+    throw new Error("Database pool is not available");
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("SELECT 1");
+  } finally {
+    client.release();
+  }
+};
+
+module.exports = { pool, verifyDbConnection };

@@ -1,7 +1,7 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { pool } = require("../config/db");
-const { getTableColumns, safeEnsureAuthSchema } = require("../db/schemaGuard");
+const { getTableColumns, ensureAuthSchema, safeEnsureAuthSchema } = require("../db/schemaGuard");
 const { TokenService } = require("../services/tokenService");
 
 const generateAccessToken = (id) => {
@@ -71,9 +71,13 @@ const buildUserResponse = (user) => ({
   role: user.role || "staff",
 });
 
+const ensureAuthSchemaReady = async () => {
+  await ensureAuthSchema();
+};
+
 module.exports.registerUser = async (req, res) => {
   try {
-    await safeEnsureAuthSchema();
+    await ensureAuthSchemaReady();
     const availableColumns = await getUsersColumns();
 
     const {
@@ -103,8 +107,7 @@ module.exports.registerUser = async (req, res) => {
     }
 
     const existingResult = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
-    const existing = existingResult.rows;
-    if (existing.length > 0) {
+    if (existingResult.rows.length > 0) {
       return res.status(400).json({ message: "User already exists" });
     }
 
@@ -182,7 +185,9 @@ module.exports.registerUser = async (req, res) => {
       JWT_SECRET: process.env.JWT_SECRET ? "SET" : "MISSING",
       JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET ? "SET" : "MISSING",
       DB_HOST: process.env.DB_HOST ? "SET" : "MISSING",
+      DB_USER: process.env.DB_USER ? "SET" : "MISSING",
       DB_NAME: process.env.DB_NAME ? "SET" : "MISSING",
+      DATABASE_URL: process.env.DATABASE_URL ? "SET" : "MISSING",
     });
 
     res.status(500).json({
@@ -190,14 +195,20 @@ module.exports.registerUser = async (req, res) => {
       accessToken: null,
       refreshToken: null,
       user: null,
-      details: process.env.NODE_ENV === "development" ? error.message : undefined,
+      error: error.message,
+      env: {
+        JWT_SECRET: process.env.JWT_SECRET ? "SET" : "MISSING",
+        JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET ? "SET" : "MISSING",
+        DB_HOST: process.env.DB_HOST ? "SET" : "MISSING",
+        DB_NAME: process.env.DB_NAME ? "SET" : "MISSING",
+      },
     });
   }
 };
 
 module.exports.loginUser = async (req, res) => {
   try {
-    await safeEnsureAuthSchema();
+    await ensureAuthSchemaReady();
     const availableColumns = await getUsersColumns();
 
     const { email, password } = req.body;
@@ -209,8 +220,9 @@ module.exports.loginUser = async (req, res) => {
     console.log("[LOGIN] Environment check:", {
       JWT_SECRET_SET: !!process.env.JWT_SECRET,
       JWT_REFRESH_SECRET_SET: !!process.env.JWT_REFRESH_SECRET,
-      DB_HOST: process.env.DB_HOST,
-    });
+      DB_HOST: process.env.DB_HOST,      DB_USER: process.env.DB_USER,
+      DB_NAME: process.env.DB_NAME,
+      DATABASE_URL: process.env.DATABASE_URL ? "SET" : "MISSING",    });
 
     if (!email || !password) {
       return res.status(400).json({ message: "Email and password are required" });
@@ -272,11 +284,12 @@ module.exports.loginUser = async (req, res) => {
       accessToken: null,
       refreshToken: null,
       user: null,
-      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+      error: error.message,
       env: {
         JWT_SECRET: process.env.JWT_SECRET ? "SET" : "MISSING",
         JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET ? "SET" : "MISSING",
         DB_HOST: process.env.DB_HOST ? "SET" : "MISSING",
+        DB_NAME: process.env.DB_NAME ? "SET" : "MISSING",
       },
     });
   }
@@ -284,7 +297,7 @@ module.exports.loginUser = async (req, res) => {
 
 module.exports.getUserProfile = async (req, res) => {
   try {
-    await safeEnsureAuthSchema();
+    await ensureAuthSchemaReady();
     const availableColumns = await getUsersColumns();
 
     const userId = req.user.id;
@@ -327,7 +340,7 @@ module.exports.getUserProfile = async (req, res) => {
 
 module.exports.updateUserProfile = async (req, res) => {
   try {
-    await safeEnsureAuthSchema();
+    await ensureAuthSchemaReady();
     const availableColumns = await getUsersColumns();
 
     const userId = req.user?.id;
@@ -339,42 +352,42 @@ module.exports.updateUserProfile = async (req, res) => {
 
     const fields = [];
     const values = [];
-let placeholderIndex = 1;
-      if (typeof name !== "undefined" && availableColumns.has("name")) {
-        fields.push(`name = $${placeholderIndex++}`);
-        values.push(name);
-      }
-      if (typeof email !== "undefined" && availableColumns.has("email")) {
-        fields.push(`email = $${placeholderIndex++}`);
-        values.push(email);
-      }
-      if (typeof role !== "undefined" && availableColumns.has("role")) {
-        fields.push(`role = $${placeholderIndex++}`);
-        values.push(role);
-      }
-      if (typeof phone !== "undefined" && availableColumns.has("phone")) {
-        fields.push(`phone = $${placeholderIndex++}`);
-        values.push(phone);
-      }
-      if (typeof company !== "undefined" && availableColumns.has("company")) {
-        fields.push(`company = $${placeholderIndex++}`);
-        values.push(company);
-      }
-      if (typeof address !== "undefined" && availableColumns.has("address")) {
-        fields.push(`address = $${placeholderIndex++}`);
-        values.push(address);
-      }
-      if (typeof description !== "undefined" && availableColumns.has("description")) {
-        fields.push(`description = $${placeholderIndex++}`);
-        values.push(description);
-      }
+    let placeholderIndex = 1;
+    if (typeof name !== "undefined" && availableColumns.has("name")) {
+      fields.push(`name = $${placeholderIndex++}`);
+      values.push(name);
+    }
+    if (typeof email !== "undefined" && availableColumns.has("email")) {
+      fields.push(`email = $${placeholderIndex++}`);
+      values.push(email);
+    }
+    if (typeof role !== "undefined" && availableColumns.has("role")) {
+      fields.push(`role = $${placeholderIndex++}`);
+      values.push(role);
+    }
+    if (typeof phone !== "undefined" && availableColumns.has("phone")) {
+      fields.push(`phone = $${placeholderIndex++}`);
+      values.push(phone);
+    }
+    if (typeof company !== "undefined" && availableColumns.has("company")) {
+      fields.push(`company = $${placeholderIndex++}`);
+      values.push(company);
+    }
+    if (typeof address !== "undefined" && availableColumns.has("address")) {
+      fields.push(`address = $${placeholderIndex++}`);
+      values.push(address);
+    }
+    if (typeof description !== "undefined" && availableColumns.has("description")) {
+      fields.push(`description = $${placeholderIndex++}`);
+      values.push(description);
+    }
 
-      if (fields.length === 0) {
-        return res.status(400).json({ message: "No profile fields provided to update" });
-      }
+    if (fields.length === 0) {
+      return res.status(400).json({ message: "No profile fields provided to update" });
+    }
 
-      values.push(userId);
-      const sql = `UPDATE users SET ${fields.join(", ")} WHERE id = $${placeholderIndex}`;
+    values.push(userId);
+    const sql = `UPDATE users SET ${fields.join(", ")} WHERE id = $${placeholderIndex}`;
     await pool.query(sql, values);
 
     const responseFields = selectAvailableColumns(availableColumns, [
@@ -387,12 +400,12 @@ let placeholderIndex = 1;
       "address",
       "description",
     ]);
-    const updatedResult = await pool.query(
+    const profileResult = await pool.query(
       `SELECT ${responseFields.join(", ")} FROM users WHERE id = $1`,
       [userId]
     );
 
-    res.json(updatedResult.rows[0]);
+    res.json(profileResult.rows[0]);
   } catch (error) {
     console.error("[PROFILE] Update profile error:", error);
     res.status(500).json({ message: "Failed to update profile" });
@@ -401,7 +414,7 @@ let placeholderIndex = 1;
 
 module.exports.changePassword = async (req, res) => {
   try {
-    await safeEnsureAuthSchema();
+    await ensureAuthSchemaReady();
     const availableColumns = await getUsersColumns();
 
     const userId = req.user?.id;
@@ -429,7 +442,6 @@ module.exports.changePassword = async (req, res) => {
 
     const passwordResult = await pool.query("SELECT password FROM users WHERE id = $1", [userId]);
     const user = passwordResult.rows[0];
-
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
@@ -451,7 +463,7 @@ module.exports.changePassword = async (req, res) => {
 
 module.exports.invalidateToken = async (req, res) => {
   try {
-    await safeEnsureAuthSchema();
+    await ensureAuthSchemaReady();
 
     const userId = req.user.id;
     const currentToken = req.headers.authorization?.split(" ")[1];
@@ -481,7 +493,7 @@ module.exports.invalidateToken = async (req, res) => {
 
 module.exports.refreshToken = async (req, res) => {
   try {
-    await safeEnsureAuthSchema();
+    await ensureAuthSchemaReady();
     const availableColumns = await getUsersColumns();
 
     const { refreshToken } = req.body;

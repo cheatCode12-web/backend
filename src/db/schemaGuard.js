@@ -2,7 +2,6 @@ const { pool } = require('../config/db');
 
 let authSchemaPromise = null;
 let messageSchemaPromise = null;
-const IDENTIFIER_PATTERN = /^[A-Za-z0-9_]+$/;
 
 async function ensurePool() {
   if (!pool) {
@@ -15,33 +14,32 @@ async function queryOne(sql, params = []) {
   return result.rows[0] || null;
 }
 
-function isSafeIdentifier(identifier) {
-  return IDENTIFIER_PATTERN.test(identifier);
-}
-
 async function tableExists(tableName) {
   const row = await queryOne(
     `
-      SELECT COUNT(*) AS count
-      FROM information_schema.tables
-      WHERE table_catalog = current_database()
-        AND table_schema = current_schema()
-        AND table_name = $1
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_catalog = current_database()
+          AND table_schema = 'public'
+          AND table_name = $1
+      ) AS exists
     `,
     [tableName]
   );
-  return Number(row && row.count) > 0;
+
+  return Boolean(row && row.exists);
 }
 
 async function columnInfo(tableName, columnName) {
   return queryOne(
     `
-      SELECT column_name AS columnName,
-             data_type AS columnType,
-             udt_name AS udtName
+      SELECT column_name AS column_name,
+             data_type AS column_type,
+             udt_name AS udt_name
       FROM information_schema.columns
       WHERE table_catalog = current_database()
-        AND table_schema = current_schema()
+        AND table_schema = 'public'
         AND table_name = $1
         AND column_name = $2
     `,
@@ -52,41 +50,33 @@ async function columnInfo(tableName, columnName) {
 async function getTableColumns(tableName) {
   await ensurePool();
 
-  try {
-    const result = await pool.query(
-      `
-        SELECT column_name AS columnName
-        FROM information_schema.columns
-        WHERE table_catalog = current_database()
-          AND table_schema = current_schema()
-          AND table_name = $1
-      `,
-      [tableName]
-    );
+  const result = await pool.query(
+    `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_catalog = current_database()
+        AND table_schema = 'public'
+        AND table_name = $1
+    `,
+    [tableName]
+  );
 
-    return new Set(result.rows.map((row) => row.columnName));
-  } catch (error) {
-    if (!isSafeIdentifier(tableName)) {
-      throw error;
-    }
-
-    return new Set();
-  }
+  return new Set(result.rows.map((row) => row.column_name));
 }
 
 async function indexExists(tableName, indexName) {
   const row = await queryOne(
     `
-      SELECT 1
-      FROM pg_class c
-      JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE c.relname = $1
-        AND c.relkind = 'i'
-        AND n.nspname = current_schema()
+      SELECT COUNT(*)::int AS count
+      FROM pg_indexes
+      WHERE schemaname = 'public'
+        AND tablename = $1
+        AND indexname = $2
     `,
-    [indexName]
+    [tableName, indexName]
   );
-  return Boolean(row);
+
+  return Number(row && row.count) > 0;
 }
 
 async function ensureColumn(tableName, columnName, definitionSql) {
@@ -102,26 +92,13 @@ async function ensureIndex(tableName, indexName, createSql) {
   }
 }
 
-async function ensureEnumType(typeName, values) {
-  if (!isSafeIdentifier(typeName)) {
-    throw new Error(`Unsafe enum type name: ${typeName}`);
-  }
-
-  const exists = await queryOne(
-    `SELECT 1 FROM pg_type WHERE typname = $1`,
-    [typeName]
-  );
-
-  if (!exists) {
-    await pool.query(
-      `CREATE TYPE ${typeName} AS ENUM (${values.map((value) => `'${value}'`).join(', ')})`
-    );
-  }
-}
-
 async function ensureUsersTable() {
-  await ensureEnumType('user_role', ['admin', 'staff', 'retailer']);
-  await ensureEnumType('user_status', ['active', 'inactive', 'pending', 'suspended']);
+  await pool.query(`
+    CREATE TYPE IF NOT EXISTS user_role AS ENUM ('admin', 'staff', 'retailer');
+  `);
+  await pool.query(`
+    CREATE TYPE IF NOT EXISTS user_status AS ENUM ('active', 'inactive', 'pending', 'suspended');
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
@@ -132,7 +109,7 @@ async function ensureUsersTable() {
       role user_role NOT NULL DEFAULT 'staff',
       status user_status NOT NULL DEFAULT 'active',
       refresh_token VARCHAR(512),
-      last_token_refresh TIMESTAMP NULL,
+      last_token_refresh TIMESTAMP,
       company VARCHAR(255),
       phone VARCHAR(50),
       address TEXT,
@@ -148,26 +125,25 @@ async function ensureUsersTable() {
   await ensureColumn('users', 'phone', 'phone VARCHAR(50) NULL');
   await ensureColumn('users', 'address', 'address TEXT NULL');
   await ensureColumn('users', 'description', 'description TEXT NULL');
-  await ensureColumn('users', 'updated_at', 'updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 
-  await ensureIndex('users', 'idx_email', 'CREATE INDEX IF NOT EXISTS idx_email ON users(email)');
-  await ensureIndex('users', 'idx_role', 'CREATE INDEX IF NOT EXISTS idx_role ON users(role)');
-  await ensureIndex('users', 'idx_status', 'CREATE INDEX IF NOT EXISTS idx_status ON users(status)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_email ON users(email)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_role ON users(role)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_status ON users(status)');
 }
 
 async function ensureTokenBlacklistTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS token_blacklist (
       id SERIAL PRIMARY KEY,
-      token VARCHAR(512) NOT NULL,
+      token TEXT NOT NULL,
       expires_at TIMESTAMP NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      user_id INTEGER NULL
+      user_id INT REFERENCES users(id) ON DELETE CASCADE
     )
   `);
 
-  await ensureIndex('token_blacklist', 'idx_token', 'CREATE INDEX IF NOT EXISTS idx_token ON token_blacklist(token)');
-  await ensureIndex('token_blacklist', 'idx_expires_at', 'CREATE INDEX IF NOT EXISTS idx_expires_at ON token_blacklist(expires_at)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_token ON token_blacklist(token)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_expires_at ON token_blacklist(expires_at)');
 }
 
 async function ensureMessagesTable() {
@@ -186,8 +162,8 @@ async function ensureMessagesTable() {
   await ensureColumn('messages', 'is_read', 'is_read BOOLEAN DEFAULT FALSE');
   await ensureColumn('messages', 'updated_at', 'updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP');
 
-  await ensureIndex('messages', 'idx_sender_recipient', 'CREATE INDEX IF NOT EXISTS idx_sender_recipient ON messages(sender_id, recipient_id)');
-  await ensureIndex('messages', 'idx_created_at', 'CREATE INDEX IF NOT EXISTS idx_created_at ON messages(created_at)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_sender_recipient ON messages(sender_id, recipient_id)');
+  await pool.query('CREATE INDEX IF NOT EXISTS idx_created_at ON messages(created_at)');
 }
 
 async function runCached(target) {
@@ -214,7 +190,7 @@ async function safeEnsureAuthSchema() {
     await ensureAuthSchema();
     return true;
   } catch (error) {
-    console.warn("Auth schema repair skipped:", error.message || error.code || error);
+    console.error('Auth schema repair failed:', error.stack || error.message || error);
     return false;
   }
 }
@@ -238,7 +214,7 @@ async function safeEnsureMessageSchema() {
     await ensureMessageSchema();
     return true;
   } catch (error) {
-    console.warn("Message schema repair skipped:", error.message || error.code || error);
+    console.error('Message schema repair failed:', error.stack || error.message || error);
     return false;
   }
 }

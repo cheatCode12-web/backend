@@ -21,16 +21,13 @@ console.log("STEP 1: env loaded", {
   NODE_ENV: process.env.NODE_ENV,
   PORT: process.env.PORT,
   DB_HOST: process.env.DB_HOST,
-  DB_PORT: process.env.DB_PORT,
   DB_NAME: process.env.DB_NAME,
-  DB_USER: process.env.DB_USER ? "SET" : "MISSING",
-  FRONTEND_URL: process.env.FRONTEND_URL,
-  RUN_MIGRATIONS: process.env.RUN_MIGRATIONS,
-  RUN_DB_INIT: process.env.RUN_DB_INIT,
+  FRONTEND_URL: process.env.FRONTEND_URL
 });
 
 const app = require("./app");
 const { createServer } = require('http');
+const { verifyDbConnection } = require('./config/db');
 
 console.log("STEP 2: app module loaded");
 
@@ -38,13 +35,24 @@ console.log("STEP 2: app module loaded");
 const PORT = process.env.PORT || 5000;
 
 let server;
-try {
-  server = app.listen(PORT, '0.0.0.0', () => {
-    console.log("STEP 3: server started", { port: PORT });
-  });
-} catch (err) {
-  console.error("Server start failed:", err);
-}
+
+const startServer = async () => {
+  try {
+    if (typeof verifyDbConnection === 'function') {
+      await verifyDbConnection();
+      console.log('STEP 2.1: database connection verified');
+    }
+
+    server = app.listen(PORT, '0.0.0.0', () => {
+      console.log("STEP 3: server started", { port: PORT });
+    });
+  } catch (err) {
+    console.error("Server start failed due to database connection error:", err.message || err);
+    process.exit(1);
+  }
+};
+
+startServer();
 
 // Initialize Socket.IO safely
 try {
